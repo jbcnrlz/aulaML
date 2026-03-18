@@ -40,14 +40,14 @@ def main():
     pesos = np.random.randn(X_train.shape[1]) * 0.001 
     bias = np.zeros(1)
 
-    epocas = 5000
+    epocas = 10000
     # Reduzi o Learning Rate; ReLU converge mais rápido mas é sensível
     learningRate = 0.0001 
 
     progresso = tqdm(range(epocas), desc="Treinando com ReLU")
 
     for i in progresso:
-        # Forward pass
+        # Neuronio estimando y
         z = np.dot(X_train, pesos) + bias 
         y_pred = relu(z) 
 

@@ -34,7 +34,7 @@ def main():
     pesos = np.random.randn(X_train.shape[1]) * 0.001 
     bias = np.zeros(1)
 
-    epocas = 5000
+    epocas = 10000
     # Reduzi o Learning Rate; ReLU converge mais rápido mas é sensível
     learningRate = 0.0001 
 
