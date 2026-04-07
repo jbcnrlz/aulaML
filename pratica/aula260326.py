@@ -67,7 +67,7 @@ if __name__ == '__main__':
     scal = StandardScaler()
     X_scaled = scal.fit_transform(X)
     
-    pca = PCA(n_components=150)
+    pca = PCA(n_components=20)
     X_scaled = pca.fit_transform(X_scaled)
 
     print("Dividindo os dados em treino e teste...")
