@@ -1,10 +1,6 @@
-import pandas as pd
-import math
+import pandas as pd, math
 import matplotlib.pyplot as plt
 
-# =====================================================================
-# 1. CONJUNTO DE DADOS (Dataset de Risco de Crédito)
-# =====================================================================
 dados = {
     'Historico':['Ruim', 'Desconhecido', 'Desconhecido', 'Bom', 'Bom', 'Bom', 'Ruim', 'Ruim', 'Bom', 'Desconhecido'],
     'Divida':   ['Alta', 'Alta', 'Baixa', 'Baixa', 'Baixa', 'Alta', 'Alta', 'Baixa', 'Baixa', 'Baixa'],
@@ -14,49 +10,52 @@ dados = {
 }
 df = pd.DataFrame(dados)
 
-# =====================================================================
-# 2. FUNÇÕES MATEMÁTICAS 
-# =====================================================================
-def calcular_entropia(coluna_alvo):
-    proporcoes = coluna_alvo.value_counts(normalize=True)
-    return -sum(p * math.log2(p) for p in proporcoes)
+def entropia(colunaAlvo):
+    #entropia = -p1*log2(p1) - p2*log2(p2) - ... - pk*log2(pk)
+    valorEnt = 0
+    proporcao = colunaAlvo.value_counts(normalize=True)
+    for p in proporcao:
+        valorEnt += p * math.log2(p)
+    return -valorEnt
 
-def calcular_ganho_informacao(df, atributo, alvo):
-    entropia_original = calcular_entropia(df[alvo])
-    valores_atributo = df[atributo].value_counts(normalize=True)
-    entropia_ponderada = 0
-    for valor, fracao in valores_atributo.items():
-        subconjunto = df[df[atributo] == valor][alvo]
-        entropia_ponderada += fracao * calcular_entropia(subconjunto)
-    return entropia_original - entropia_ponderada
+def calculoGanhoInformacao(dados,atributo,alvo):
+    #ganho de informação = entropia do dataset - entropia ponderada dos subconjuntos
+    enttropiaOriginal = entropia(dados[alvo])
+    valorAtributo = dados[atributo].value_counts(normalize=True)
+    print(valorAtributo)
+    entropiaPonderada = 0
+    for valor, proporcao in valorAtributo.items():
+        subconjunto = dados[dados[atributo] == valor][alvo]
+        entropiaPonderada += proporcao * entropia(subconjunto)
 
-# =====================================================================
-# 3. ALGORITMO ID3
-# =====================================================================
-def id3(df, atributos, alvo):
-    if len(df[alvo].unique()) == 1:
-        return df[alvo].iloc[0] 
-    if len(atributos) == 0:
-        return df[alvo].mode()[0]
+    return enttropiaOriginal - entropiaPonderada
+
+def id3(dados, atributos, alvo):
+    if (len(dados[alvo].unique()) == 1):
+        return dados[alvo].iloc[0]
+    if (len(atributos) == 0):
+        return dados[alvo].mode()[0]
     
-    ganhos = {atr: calcular_ganho_informacao(df, atr, alvo) for atr in atributos}
-    melhor_atributo = max(ganhos, key=ganhos.get)
-    
-    arvore = {melhor_atributo: {}}
-    atributos_restantes = [atr for atr in atributos if atr != melhor_atributo]
-    
-    for valor in df[melhor_atributo].unique():
-        sub_df = df[df[melhor_atributo] == valor]
-        if sub_df.empty:
-            arvore[melhor_atributo][valor] = df[alvo].mode()[0]
-        else:
-            arvore[melhor_atributo][valor] = id3(sub_df, atributos_restantes, alvo)
-            
+    ganhos = {}
+    for atributo in atributos:
+        ganhos[atributo] = calculoGanhoInformacao(dados, atributo, alvo)
+
+    print(ganhos)
+
+    melhorAtributo = max(ganhos, key=ganhos.get)
+
+    arvore = {melhorAtributo: {}}
+    atributosRestantes = []
+    for atributo in atributos:
+        if atributo != melhorAtributo:
+            atributosRestantes.append(atributo)
+
+    for valor in dados[melhorAtributo].unique():
+        subconjunto = dados[dados[melhorAtributo] == valor]
+        arvore[melhorAtributo][valor] = id3(subconjunto, atributosRestantes, alvo)
+
     return arvore
 
-# =====================================================================
-# 4. VISUALIZAÇÃO COM MATPLOTLIB
-# =====================================================================
 def desenhar_no(ax, texto, centro, pai_coord, rotulo_ramo, is_folha=False):
     """Desenha um nó (caixa) e uma seta conectando-o ao pai."""
     # Estilos diferentes para nós de decisão e folhas
@@ -108,16 +107,15 @@ def plotar_arvore_recursiva(arvore, ax, x, y, dx, dy, pai_coord=None, rotulo_ram
         plotar_arvore_recursiva(sub_arvore, ax, filho_x, filho_y, dx / 1.5, dy, 
                                 pai_coord=(x, y), rotulo_ramo=str(valor_ramo))
 
-# =====================================================================
-# 5. EXECUÇÃO
-# =====================================================================
+
 if __name__ == "__main__":
     atributos_disponiveis = ['Historico', 'Divida', 'Garantia', 'Renda']
     alvo = 'Risco'
 
     # Treinando o modelo
     modelo_arvore = id3(df, atributos_disponiveis, alvo)
-    
+    print(modelo_arvore)
+
     # Configurando o Canvas do Matplotlib
     fig, ax = plt.subplots(figsize=(10, 6))
     ax.axis('off') # Remove os eixos (grid)
