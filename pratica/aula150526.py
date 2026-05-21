@@ -2,21 +2,49 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-from sklearn.datasets import load_iris
+from sklearn.datasets import load_iris, fetch_openml
 from sklearn.model_selection import train_test_split
-
-iris = load_iris()
-df = pd.DataFrame(iris.data, columns=iris.feature_names)
-df['Especie'] = iris.target
-
-df_train, df_test = train_test_split(df, test_size=0.2, random_state=42)
 
 def entropia(colunaAlvo):
     proportions = colunaAlvo.value_counts(normalize=True)
     ent = []
     for p in proportions:
-        ent.append(p * math.log2(p))
+        if p == 0:
+            ent.append(0)
+        else:
+            ent.append(p * math.log2(p))
     return -sum(ent)
+
+def gini(colunaAlvo):
+    proporcoes = colunaAlvo.value_counts(normalize=True)
+    somatorio = 0
+    for p in proporcoes:
+        somatorio += p ** 2 #somatorio das probabilidades ao quadrado
+    return 1 - somatorio
+
+
+def encontrarLimiarGini(dados, atributo, alvo):
+    valoresUnicos = np.sort(dados[atributo].unique())
+    melhorReducaoGini = -1
+    melhorLimiar = None
+    giniBase = gini(dados[alvo])
+
+    for i in range(len(valoresUnicos) - 1):
+        limiar = (valoresUnicos[i] + valoresUnicos[i + 1]) / 2.0
+
+        subsetEsquerda = dados[dados[atributo] <= limiar][alvo]
+        subsetDireita = dados[dados[atributo] > limiar][alvo]
+
+        pesoEsquerda = len(subsetEsquerda) / len(dados)
+        pesoDireita = len(subsetDireita) / len(dados)
+        giniPonderado = (pesoEsquerda * gini(subsetEsquerda)) + (pesoDireita * gini(subsetDireita))
+        reducaoGini = giniBase - giniPonderado
+
+        if reducaoGini > melhorReducaoGini:
+            melhorReducaoGini = reducaoGini
+            melhorLimiar = limiar
+
+    return melhorLimiar, melhorReducaoGini
 
 def encontrarLimiar(dados, atributo, alvo):
     valoresUnicos = np.sort(dados[atributo].unique())
@@ -42,7 +70,7 @@ def encontrarLimiar(dados, atributo, alvo):
     return melhorLimiar, melhorGanho
 
 
-def c45(dados, atributos, alvo, profundidadeAtual=0, profundidadeMaxima=4):
+def c45(dados, atributos, alvo, profundidadeAtual=0, profundidadeMaxima=4,funcaoCriterio="entropia"):
 
     if len(dados[alvo].unique()) == 1:
         return dados[alvo].iloc[0]
@@ -55,7 +83,10 @@ def c45(dados, atributos, alvo, profundidadeAtual=0, profundidadeMaxima=4):
     melhorLimiarGlobal = None
 
     for a in atributos:
-        limiar, ganho = encontrarLimiar(dados, a, alvo)
+        if funcaoCriterio == "gini":
+            limiar, ganho = encontrarLimiarGini(dados, a, alvo)
+        else:
+            limiar, ganho = encontrarLimiar(dados, a, alvo)
         if ganho > melhorGanhoGlobal:
             melhorGanhoGlobal = ganho
             melhorAtributoGlobal = a
@@ -124,13 +155,77 @@ def plotar_arvore_c45_recursiva(arvore, ax, x, y, dx, dy, pai_coord=None, rotulo
     plotar_arvore_c45_recursiva(ramo_dir, ax, x + dx, y - dy, dx / 1.6, dy, 
                                 pai_coord=(x, y), rotulo_ramo=f"> {limiar:.2f}")
 
+
+def preverAmostra(arvore, amostra):
+    if not isinstance(arvore, dict):
+        return arvore
+    
+    atributos = list(arvore.keys())[0]
+    limiar = arvore[atributos]['limiar']
+    if amostra[atributos] <= limiar:
+        return preverAmostra(arvore[atributos]['<='], amostra)
+    else:
+        return preverAmostra(arvore[atributos]['>'], amostra)
+
 if __name__ == "__main__":
-    alvo = 'Especie'
-    atributos = iris.feature_names
-    arvore_c45 = c45(df_train, atributos, alvo)
+    dataset = "mnist"
+    if dataset == "mnist":
+        print("Carregando o dataset MNIST...")
+        X, y = fetch_openml('mnist_784', version=1, as_frame=True, return_X_y=True,parser="auto")
+        
+        df = X.copy()
+        df['Label'] = y
 
-    fig, ax = plt.subplots(figsize=(12, 7))
-    ax.axis('off')
+        df = df.sample(n=1000, random_state=42)
 
-    plotar_arvore_c45_recursiva(arvore_c45, ax, x=0.5, y=1.0, dx=0.25, dy=0.15)
-    plt.show()
+        df_train, df_test = train_test_split(df, test_size=0.2, random_state=42)
+
+        alvo = 'Label'
+        atributos_disponiveis = []
+        for c in df_train.columns:
+            if c != alvo:
+                atributos_disponiveis.append(c)
+        
+        tipoArvore = ["entropia", "gini"]
+        for t in tipoArvore:
+            arvore_c45 = c45(df_train, atributos_disponiveis, alvo, funcaoCriterio=t)
+
+            acc = 0
+            total = 0
+            for _, linha in df_test.iterrows():
+                total += 1
+                predicao = preverAmostra(arvore_c45, linha)
+                if predicao == str(linha[alvo]):
+                    acc += 1
+
+            acc = acc / total
+            print(f"Acurácia da arvore com critério {t}: {acc:.2f}")
+    else:
+        iris = load_iris()
+        df = pd.DataFrame(iris.data, columns=iris.feature_names)
+        df['Especie'] = iris.target
+
+        df_train, df_test = train_test_split(df, test_size=0.2, random_state=42)
+
+        alvo = 'Especie'
+        atributos = iris.feature_names
+        tipoArvore = ["entropia", "gini"]
+        for t in tipoArvore:
+            arvore_c45 = c45(df_train, atributos, alvo, funcaoCriterio=t)
+
+            fig, ax = plt.subplots(figsize=(12, 7))
+            ax.axis('off')
+
+            plotar_arvore_c45_recursiva(arvore_c45, ax, x=0.5, y=1.0, dx=0.25, dy=0.15)
+            plt.show()
+
+            acc = 0
+            total = 0
+            for _, linha in df_test.iterrows():
+                total += 1
+                predicao = preverAmostra(arvore_c45, linha)
+                if predicao == int(linha[alvo]):
+                    acc += 1
+
+            acc = acc / total
+            print(f"Acurácia da arvore com critério {t}: {acc:.2f}")
